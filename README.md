@@ -154,7 +154,9 @@ v0.1 はこれで落ちた。ルールが一度も上がっておらず、本番
 ```bash
 PROJECT=tarot-mirror-a74b6
 NUMBER=$(gcloud projects describe $PROJECT --format='value(projectNumber)')
-REPO=Shunnie816/tarot-mirror
+REPO=Nokono222/tarot-mirror
+# 名前ではなく ID で絞る（理由は下）
+REPO_ID=$(gh api repos/$REPO --jq .id)
 
 # 1. デプロイ専用のサービスアカウント
 gcloud iam service-accounts create github-deployer \
@@ -185,19 +187,25 @@ gcloud iam workload-identity-pools create github --project=$PROJECT --location=g
 gcloud iam workload-identity-pools providers create-oidc github \
   --project=$PROJECT --location=global --workload-identity-pool=github \
   --issuer-uri="https://token.actions.githubusercontent.com" \
-  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository" \
-  --attribute-condition="assertion.repository=='$REPO'"
+  --attribute-mapping="google.subject=assertion.sub,attribute.repository=assertion.repository,attribute.repository_id=assertion.repository_id" \
+  --attribute-condition="assertion.repository_id=='$REPO_ID'"
 
 # 6. このリポジトリにだけ、そのサービスアカウントを使わせる
 gcloud iam service-accounts add-iam-policy-binding $SA --project=$PROJECT \
   --role=roles/iam.workloadIdentityUser \
-  --member="principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository/$REPO"
+  --member="principalSet://iam.googleapis.com/projects/$NUMBER/locations/global/workloadIdentityPools/github/attribute.repository_id/$REPO_ID"
 
 # 7. ワークフローに教える（秘密ではないので variable でよい）
 gh variable set GCP_WORKLOAD_IDENTITY_PROVIDER \
   --body "projects/$NUMBER/locations/global/workloadIdentityPools/github/providers/github"
 gh variable set GCP_DEPLOY_SERVICE_ACCOUNT --body "$SA"
 ```
+
+**WIF はリポジトリ名ではなく `repository_id` で絞る。** GitHub の OIDC トークンの
+`repository` は `owner/name` の文字列なので、ユーザー名やリポジトリ名を変えた
+瞬間に条件から外れ、`deploy` だけが認証で落ちる（ユーザー名の
+変更で実際に踏みかけた。#112）。しかも旧名を他人が取れば、その人の同名
+リポジトリが条件を満たしてしまう。ID はリネームでも譲渡でも変わらない。
 
 **`roles/iam.serviceAccountUser` を落とさないこと。** Function のデプロイは
 実行用サービスアカウントを `actAs` する。これが無いと、npm でもビルドでもなく

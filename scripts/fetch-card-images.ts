@@ -40,7 +40,7 @@ const WIDTH = 320;
 const QUALITY = 72;
 
 const USER_AGENT =
-  "tarot-mirror/0.0 (https://github.com/Shunnie816/tarot-mirror)";
+  "tarot-mirror/0.0 (https://github.com/Nokono222/tarot-mirror)";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const outDir = path.join(root, "apps", "web", "public", "cards");
